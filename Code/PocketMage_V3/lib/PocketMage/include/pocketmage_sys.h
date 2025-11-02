@@ -17,6 +17,7 @@ extern bool mscEnabled;
 extern bool sinkEnabled;
 extern volatile bool SDActive;
 extern volatile int battState;       // Battery state
+extern volatile bool PWR_BTN_event;  // Power button event **shared with library**
 
 extern bool rebootToPocketMage();
 // To Do: remove nested namespaces and default to pocketmage::method()
@@ -36,17 +37,12 @@ namespace pocketmage{
 
   namespace time{
     void setTimeFromString(String timeStr);
-    void checkTimeout();
+
     void setCpuSpeed(int newFreq);
   }
   namespace power{
     void deepSleep(bool alternateScreenSaver = false);
     void IRAM_ATTR PWR_BTN_irq();
-    void updateBattState();
-    void loadState(bool changeState = true);
-  }
-  namespace debug{
-    void printDebug();
   }
 }
 

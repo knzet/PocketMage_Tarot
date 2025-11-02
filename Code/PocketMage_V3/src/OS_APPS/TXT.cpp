@@ -26,11 +26,8 @@ void TXT_INIT_OLD() {
 }
 
 void processKB_TXT_OLD() {
-  if (OLEDPowerSave) {
-    u8g2.setPowerSave(0);
-    OLEDPowerSave = false;
-  }
-
+  OLED().setPowerSave(false);
+  
   disableTimeout = false;
 
   unsigned long currentMillis = millis();

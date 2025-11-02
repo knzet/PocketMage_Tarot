@@ -13,6 +13,7 @@
 #define TOUCH_TIMEOUT_MS 1200                   // Delay after scrolling to return to typing mode (ms)
 #define SYS_METADATA_FILE "/sys/SDMMC_META.txt" // File path to the file system metadata file
 #define POWER_SAVE_FREQ 40                      // CPU freq for power save mode
+#define OTA_APP false                           // Is this an OTA APP?
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////|
 
 // PIN DEFINITION
@@ -59,9 +60,5 @@ extern bool ALLOW_NO_MICROSD;    // Allow running without SD card
 extern bool HOME_ON_BOOT;        // Start home app on boot
 extern int OLED_BRIGHTNESS;      // OLED brightness (0-255)
 extern int OLED_MAX_FPS;         // OLED max FPS
-
-// System tags
-extern bool mscEnabled;      // Is USB MSC active?
-extern bool sinkEnabled;     // Is USB in sink mode?
 
 #endif

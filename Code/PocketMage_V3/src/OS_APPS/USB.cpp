@@ -8,6 +8,8 @@
 
 static String currentLine = "";
 static constexpr const char* TAG = "USB";
+static USBMSC msc;
+static sdmmc_card_t* card = nullptr;     // SD card pointer
 
 void USBAppShutdown() {
   if (!mscEnabled) return;

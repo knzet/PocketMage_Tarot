@@ -287,7 +287,7 @@ void einkHandler_settings() {
     newState = false;
 
     // Load settings
-    pocketmage::power::loadState(false);
+    loadState(false);
     
     // Display Background
     display.fillScreen(GxEPD_WHITE);

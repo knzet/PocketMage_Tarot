@@ -1772,11 +1772,7 @@ void einkHandler_TXT_NEW() {
 }
 
 void processKB_TXT_NEW() {
-  if (OLEDPowerSave) {
-    u8g2.setPowerSave(0);
-    OLEDPowerSave = false;
-  }
-
+  OLED().setPowerSave(false);
   disableTimeout = false;
   String outPath = "";
   char inchar;

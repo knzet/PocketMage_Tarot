@@ -127,10 +127,7 @@ String convertDateFormat(String yyyymmdd) {
 }
 
 void processKB_TASKS() {
-  if (OLEDPowerSave) {
-    u8g2.setPowerSave(0);
-    OLEDPowerSave = false;
-  }
+  OLED().setPowerSave(false);
   int currentMillis = millis();
   disableTimeout = false;
   char inchar;

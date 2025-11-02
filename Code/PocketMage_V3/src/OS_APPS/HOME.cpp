@@ -12,7 +12,7 @@
 
 static String currentLine = "";
 static bool resetIdleAnim = false; 
-
+static int prevTime = 0;
 long lastInput = 0;
 
 void HOME_INIT() {

@@ -16,6 +16,12 @@ static constexpr const char* TAG = "MAIN"; // TODO: Come up with a better tag
 
 // ADD E-INK HANDLER APP SCRIPTS HERE
 void applicationEinkHandler() {
+  if (OTA_APP) {
+    ESP_LOGD(TAG, "OTA APP MODE - SKIPPING EINK HANDLER\n");
+    einkHandler_APP();
+    return;
+  }
+
   switch (CurrentAppState) {
     case HOME:
       einkHandler_HOME();
@@ -58,6 +64,30 @@ void applicationEinkHandler() {
 void processKB() {
   // Check for USB KB
   KB().checkUSBKB();
+
+  // Example OTA APP 
+  // Displays a progress bar and then reboots to PocketMage OS
+  // Remove this when making a real OTA APP + uncomment processKB_APP();
+  if (OTA_APP) {
+    static int x = 0;
+    ESP_LOGD(TAG, "OTA APP MODE - PROGRESS: %d\n", x);
+    // Draw a progress bar across the screen and then return to PocketMage OS
+    u8g2.clearBuffer();
+    u8g2.drawBox(0,0,x,u8g2.getDisplayHeight());
+    
+    x+=5;
+    
+    if (x > u8g2.getDisplayWidth()) {
+      // Return to pocketMage OS
+      rebootToPocketMage();
+    }
+
+    u8g2.sendBuffer();
+    delay(10);
+
+    //processKB_APP();
+    return;
+  }
 
   switch (CurrentAppState) {
     case HOME:
@@ -113,12 +143,15 @@ void setup() {
 
 // Keyboard / OLED Loop
 void loop() {
-  if (!noTimeout)  pocketmage::time::checkTimeout();
-  if (DEBUG_VERBOSE) pocketmage::debug::printDebug();
 
-  PowerSystem.printDiagnostics(); // power diag
-  
-  pocketmage::power::updateBattState();
+  if (!OTA_APP){
+    if (!noTimeout)  checkTimeout();
+    if (DEBUG_VERBOSE) printDebug();
+
+    PowerSystem.printDiagnostics();
+  }
+
+  updateBattState();
   processKB();
 
   // Yield to watchdog

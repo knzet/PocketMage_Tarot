@@ -273,6 +273,10 @@ void PocketmageOled::oledScroll() {
   u8g2_.sendBuffer();
 }
 
+void PocketmageOled::setPowerSave(bool enable) {
+  OLEDPowerSave_ = enable;
+  u8g2_.setPowerSave(enable ? 1 : 0);
+}
 // ===================== private functions =====================
 // COMPUTE STRING WIDTH IN EINK PIXELS
 uint16_t PocketmageOled::strWidth(const String& s) const {
