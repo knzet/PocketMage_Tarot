@@ -1,9 +1,16 @@
 name: Build & publish web flasher assets (WIP)
 
+# allow manual dispatch + releases
 on:
   workflow_dispatch:
   release:
     types: [published]
+
+# Required permissions for actions/deploy-pages@v4
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   build_and_deploy:
@@ -76,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           # defaults.run sets working-directory to Code/PocketMage_V3.
-          # We want docs/ at the repository root for the upload action, so use GITHUB_WORKSPACE for output.
+          # write docs into the repository root so upload-pages-artifact can find it.
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           BUILD_DIR="$GITHUB_WORKSPACE/Code/PocketMage_V3/.pio/build/PM_V3"
           TARGET_DIR="$GITHUB_WORKSPACE/docs/firmware/${RELEASE_TAG}"
