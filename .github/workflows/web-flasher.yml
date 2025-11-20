@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           pip install -U platformio esptool
           sudo apt-get update
-          sudo apt-get install -y jq
+          sudo apt-get install -y jq rsync
 
       - name: Forge the PocketMage Firmware
         run: |
@@ -170,7 +170,7 @@ jobs:
           # Ensure docs folder exists (important)
           mkdir -p "$GITHUB_WORKSPACE/docs"
 
-          # Update or create version index (prepend newest and dedupe preserving first)
+          # Update or create version index (local docs copy)
           INDEX_FILE="$GITHUB_WORKSPACE/docs/manifest-index.json"
           if [ -f "${INDEX_FILE}" ]; then
             jq --arg v "$RELEASE_TAG" '
@@ -183,7 +183,7 @@ jobs:
           fi
 
           echo "Updated manifest-index.json with version: $RELEASE_TAG"
-          echo "manifest-index.json content:"
+          echo "manifest-index.json content (local docs):"
           cat "$INDEX_FILE"
 
       - name: Write the Deploy Info Scroll
@@ -194,7 +194,6 @@ jobs:
           # prefer release tag when available; fall back to dev timestamp
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           if [ -z "$RELEASE_TAG" ]; then
-            echo "Not a release event; using dev timestamp for release_tag"
             RELEASE_TAG="dev-$(date +%Y%m%d-%H%M%S)"
           fi
 
@@ -210,20 +209,85 @@ jobs:
           echo "Wrote deploy-info.json:"
           cat "$GITHUB_WORKSPACE/docs/deploy-info.json"
 
-      - name: Copy the Web Flasher Shrine (interface)
+      - name: Prepare gh-pages tree (merge, remove old dev-* only)
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/docs"
-          cp "$GITHUB_WORKSPACE/Code/WebFlasher/index.html" "$GITHUB_WORKSPACE/docs/index.html"
-          cp "$GITHUB_WORKSPACE/Code/WebFlasher/logo.png" "$GITHUB_WORKSPACE/docs/logo.png"
-          cp "$GITHUB_WORKSPACE/Code/WebFlasher/favicon.png" "$GITHUB_WORKSPACE/docs/favicon.png"
-          echo "Copied web flasher interface"
-          echo "docs/ tree to be published:"
-          ls -la "$GITHUB_WORKSPACE/docs" || true
+
+          GH_PAGES_DIR="$GITHUB_WORKSPACE/gh-pages"
+          mkdir -p "$GH_PAGES_DIR"
+
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+          echo "Checking if gh-pages branch exists on remote..."
+          if git ls-remote --heads "$REPO_URL" gh-pages | grep -q refs/heads/gh-pages; then
+            echo "Cloning existing gh-pages branch..."
+            git clone --depth=1 --branch gh-pages "$REPO_URL" "$GH_PAGES_DIR"
+          else
+            echo "gh-pages branch does not exist; creating a fresh tree"
+            mkdir -p "$GH_PAGES_DIR"
+            git -C "$GH_PAGES_DIR" init
+          fi
+
+          # Remove previous dev-* firmware directories only (we want to keep released versions)
+          if [ -d "$GH_PAGES_DIR/firmware" ]; then
+            echo "Removing old dev-* firmware dirs from gh-pages (if any)..."
+            find "$GH_PAGES_DIR/firmware" -maxdepth 1 -type d -name 'dev-*' -print -exec rm -rf {} +
+          fi
+
+          # Copy new docs into the gh-pages tree without deleting existing release folders
+          echo "Copying new docs into gh-pages tree (rsync will overwrite but not remove other release dirs)..."
+          rsync -a --delete --exclude='.git' "$GITHUB_WORKSPACE/docs/" "$GH_PAGES_DIR/"
+
+          # Merge manifest-index.json:
+          # Goal: preserve released versions, keep only the current dev-* (if current tag is dev-...)
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="dev-$(date +%Y%m%d-%H%M%S)"
+          fi
+          echo "Merging manifest-index.json on gh-pages (ensure releases persist). RELEASE_TAG=$RELEASE_TAG"
+
+          MANIFEST="$GH_PAGES_DIR/manifest-index.json"
+          TMP="$GH_PAGES_DIR/manifest-index.json.tmp"
+
+          # If manifest exists on gh-pages use it, otherwise start from an empty array
+          if [ -f "$MANIFEST" ]; then
+            echo "Found existing manifest on gh-pages, merging..."
+            cat "$MANIFEST" | jq --arg v "$RELEASE_TAG" '
+              # keep only non-dev (released) versions from the existing list
+              (.versions // []) | map(select(test("^dev-")|not)) as $releases |
+              # prepend current release/dev and preserve first occurrence order (uniq_preserve)
+              ([$v] + $releases) as $merged |
+              reduce $merged[] as $i ([]; if index($i)==null then . + [$i] else . end) | {versions: .}
+            ' > "$TMP"
+          else
+            echo "No existing manifest on gh-pages, creating from RELEASE_TAG"
+            echo '{"versions":[]}' | jq --arg v "$RELEASE_TAG" '
+              ([$v] + (.versions // [])) | reduce .[] as $i ([]; if index($i)==null then . + [$i] else . end) | {versions: .}
+            ' > "$TMP"
+          fi
+
+          mv "$TMP" "$MANIFEST"
+          echo "Merged manifest-index.json (gh-pages):"
+          cat "$MANIFEST"
+
+          # Show final tree for debugging
+          echo "Final gh-pages tree (top-level):"
+          ls -la "$GH_PAGES_DIR"
+          echo "Final firmware dirs on gh-pages:"
+          ls -la "$GH_PAGES_DIR/firmware" || true
+
+      - name: Debug
+        run: |
+          set -euo pipefail
+          echo "Contents of prepared gh-pages dir (preview):"
+          find "$GITHUB_WORKSPACE/gh-pages" -maxdepth 2 -type f -print | sed -n '1,200p' || true
+          echo "--- manifest-index.json ---"
+          cat "$GITHUB_WORKSPACE/gh-pages/manifest-index.json" || true
+          echo "--- deploy-info.json ---"
+          cat "$GITHUB_WORKSPACE/gh-pages/deploy-info.json" || true
 
       - name: Deploy to gh-pages (peaceiris/actions-gh-pages)
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
+          publish_dir: ${{ github.workspace }}/gh-pages
           commit_message: "[ci skip] chore(pages): deploy docs from run ${{ github.run_number }} (${GITHUB_SHA})"
