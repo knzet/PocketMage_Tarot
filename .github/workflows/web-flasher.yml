@@ -226,6 +226,11 @@ jobs:
           echo "Attempting to clone gh-pages branch to inspect existing published assets..."
           if git clone --depth=1 --branch gh-pages "$REPO_URL" "$TMP_DIR" 2>/dev/null; then
             echo "gh-pages branch cloned to $TMP_DIR"
+            
+            # List what's actually in gh-pages
+            echo "Contents of gh-pages docs/firmware:"
+            ls -la "$TMP_DIR/docs/firmware/" || echo "  (directory does not exist)"
+            
             # Ensure workspace docs firmware directory exists
             mkdir -p "$GITHUB_WORKSPACE/docs/firmware"
 
@@ -233,13 +238,17 @@ jobs:
             if [ -d "$TMP_DIR/docs/firmware" ]; then
               echo "Copying release firmware directories from gh-pages into workspace docs/firmware..."
               # Only copy directories that do NOT start with dev-
-              find "$TMP_DIR/docs/firmware" -maxdepth 1 -mindepth 1 -type d ! -name 'dev-*' -print0 | while IFS= read -r -d '' dir; do
-                base=$(basename "$dir")
-                echo "  copying release dir: $base"
-                # preserve existing release directories; overwrite if same name
-                rm -rf "$GITHUB_WORKSPACE/docs/firmware/$base" || true
-                cp -a "$dir" "$GITHUB_WORKSPACE/docs/firmware/$base"
-              done || true
+              if ls -d "$TMP_DIR/docs/firmware"/*/ 2>/dev/null | grep -v '/dev-' > /dev/null; then
+                find "$TMP_DIR/docs/firmware" -maxdepth 1 -mindepth 1 -type d ! -name 'dev-*' -print0 | while IFS= read -r -d '' dir; do
+                  base=$(basename "$dir")
+                  echo "  copying release dir: $base"
+                  # preserve existing release directories; overwrite if same name
+                  rm -rf "$GITHUB_WORKSPACE/docs/firmware/$base" || true
+                  cp -a "$dir" "$GITHUB_WORKSPACE/docs/firmware/$base"
+                done || true
+              else
+                echo "  no release directories found"
+              fi
 
               echo "Identifying the newest $KEEP_DEV_COUNT dev-* versions from gh-pages..."
               # Get all dev dirs from gh-pages, sort them (lexicographically newest last), keep last N
@@ -272,41 +281,18 @@ jobs:
               else
                 echo "No existing dev versions found in gh-pages"
               fi
+            else
+              echo "No firmware directory in gh-pages yet"
             fi
 
-            # Now handle the new version (current build) - if it's a dev version, we need to make room
-            CURRENT_VERSION="${{ steps.version.outputs.release_tag }}"
+            # Now we should have current build + (KEEP_DEV_COUNT - 1) old builds in workspace
+            # No additional pruning needed since we already limited the copy above
             
-            if [[ "$CURRENT_VERSION" == dev-* ]]; then
-              echo "Current build is a dev version ($CURRENT_VERSION), will ensure only $KEEP_DEV_COUNT total dev versions exist"
-              # After copying old devs, count total dev versions (including the new one about to be added)
-              # The new one is already in docs/firmware from the "Scribe the Firmware Manifest" step
-            fi
-
-            # Prune dev-* firmware directories in workspace to keep only the newest KEEP_DEV_COUNT
-            # BUT we need to keep the current build + (KEEP_DEV_COUNT - 1) old ones = KEEP_DEV_COUNT total
+            echo "Verifying final dev version count..."
             if [ -d "$GITHUB_WORKSPACE/docs/firmware" ]; then
-              echo "Final pruning: keeping current build + $(( KEEP_DEV_COUNT - 1 )) old dev versions (total: $KEEP_DEV_COUNT)..."
-              mapfile -t all_dev_dirs < <(find "$GITHUB_WORKSPACE/docs/firmware" -maxdepth 1 -mindepth 1 -type d -name 'dev-*' -printf '%f\n' | sort)
-              total_devs=${#all_dev_dirs[@]}
-              
-              # We want to keep KEEP_DEV_COUNT total (including current build which is already in the list)
-              if [ "$total_devs" -gt "$KEEP_DEV_COUNT" ]; then
-                to_remove=$(( total_devs - KEEP_DEV_COUNT ))
-                echo "Found $total_devs dev versions total; removing $to_remove oldest..."
-                for i in $(seq 0 $((to_remove - 1))); do
-                  remove_name="${all_dev_dirs[$i]}"
-                  # Make sure we're not removing the current build
-                  if [ "$remove_name" != "$CURRENT_VERSION" ]; then
-                    echo "  removing old dev dir: $remove_name"
-                    rm -rf "$GITHUB_WORKSPACE/docs/firmware/$remove_name" || true
-                  else
-                    echo "  skipping current build: $remove_name"
-                  fi
-                done
-              else
-                echo "Dev count ($total_devs) <= $KEEP_DEV_COUNT; nothing to prune."
-              fi
+              mapfile -t final_dev_dirs < <(find "$GITHUB_WORKSPACE/docs/firmware" -maxdepth 1 -mindepth 1 -type d -name 'dev-*' -printf '%f\n' | sort)
+              echo "Final dev versions (${#final_dev_dirs[@]}):"
+              printf '  %s\n' "${final_dev_dirs[@]}"
             fi
 
             # Rebuild manifest-index.json from what's actually in docs/firmware after pruning
@@ -354,4 +340,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs
+          keep_files: false
           commit_message: "chore(pages): deploy docs from run ${{ github.run_number }}"
