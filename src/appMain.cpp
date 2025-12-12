@@ -1,10 +1,6 @@
-// PocketMage V3.0
 // @knzet 2025
 
-
-
 #include <pocketmage.h>
-
 #include <vector>
 
 // Card image size
