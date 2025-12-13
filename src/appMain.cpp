@@ -24,7 +24,7 @@ bool tarotLoaded = false;
 
 bool drawTarot(int idx) {
   char path[32];
-  snprintf(path, sizeof(path), "/apps/images/ar%02d.bin", idx);
+  snprintf(path, sizeof(path), "/assets/tarot/ar%02d.bin", idx);
 
   const int BYTES = CARD_W * CARD_H / 8;
   static uint8_t tarotImage[BYTES];
