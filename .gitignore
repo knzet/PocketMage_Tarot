@@ -1,4 +1,4 @@
 .pio
 .vscode
 **/*.tar
-images/output
+images/output*

@@ -3,15 +3,19 @@ import requests
 from PIL import Image
 
 BASE_URL = "https://www.sacred-texts.com/tarot/pkt/img/ar{:02d}.jpg"
-
 OUTPUT_DIR = "output"
+
+SIZES = {
+    "single": (128, 218),   # 1-card
+    "spread3": (88, 153),   # 3-card
+}
+
 FOLDERS = {
     "orig": "01_original",
     "gray": "02_gray",
     "resized": "03_resized",
     "bit1": "04_1bit",
     "bin": "05_binary",
-    "carray": "06_c_arrays"
 }
 
 
@@ -19,8 +23,13 @@ FOLDERS = {
 # Ensure directory structure
 # --------------------------------------------------
 def ensure_dirs():
-    for folder in FOLDERS.values():
-        os.makedirs(os.path.join(OUTPUT_DIR, folder), exist_ok=True)
+    os.makedirs(os.path.join(OUTPUT_DIR, FOLDERS["orig"]), exist_ok=True)
+    for stage in ["gray", "resized", "bit1", "bin"]:
+        for key in SIZES:
+            os.makedirs(
+                os.path.join(OUTPUT_DIR, FOLDERS[stage], key),
+                exist_ok=True,
+            )
 
 
 # --------------------------------------------------
@@ -36,22 +45,20 @@ def download_image(index):
     path = os.path.join(OUTPUT_DIR, FOLDERS["orig"], f"ar{index:02d}.jpg")
     with open(path, "wb") as f:
         f.write(resp.content)
-    print(f"Downloaded {url}")
+
+    print(f"Downloaded ar{index:02d}")
     return path
 
 
 # --------------------------------------------------
 # PACK image into 1-bit-per-pixel .bin format
 # --------------------------------------------------
-def write_bin_bitmap(input_path, output_path):
-    img = Image.open(input_path).convert("1", dither=Image.NONE)  # already resized, but ensure 1-bit
-
+def write_bin_bitmap(img, output_path):
     pixels = img.load()
     width, height = img.size
 
-    # MUST be width divisible by 8
     if width % 8 != 0:
-        raise ValueError("Width must be divisible by 8 for bin packing")
+        raise ValueError("Width must be divisible by 8")
 
     data = bytearray()
 
@@ -60,8 +67,8 @@ def write_bin_bitmap(input_path, output_path):
             byte = 0
             for bit in range(8):
                 px = pixels[x + bit, y]
-                bitval = 1 if px < 128 else 0  # dark → 1, light → 0
-                byte |= (bitval << (7 - bit))
+                bitval = 1 if px == 0 else 0  # black = 1
+                byte |= bitval << (7 - bit)
             data.append(byte)
 
     with open(output_path, "wb") as f:
@@ -71,27 +78,37 @@ def write_bin_bitmap(input_path, output_path):
 
 
 # --------------------------------------------------
-# Master processor per image
+# Process image for all sizes
 # --------------------------------------------------
 def process_image(input_path, index):
-    # 1. grayscale
-    gray_img = Image.open(input_path).convert("L")
-    gray_path = os.path.join(OUTPUT_DIR, FOLDERS["gray"], f"ar{index:02d}.png")
-    gray_img.save(gray_path)
+    base_gray = Image.open(input_path).convert("L")
 
-    # 2. resize to PocketMage tarot size
-    resized_img = gray_img.resize((128, 218), Image.NEAREST)
-    resized_path = os.path.join(OUTPUT_DIR, FOLDERS["resized"], f"ar{index:02d}.png")
-    resized_img.save(resized_path)
+    for key, (W, H) in SIZES.items():
+        # grayscale
+        gray_path = os.path.join(
+            OUTPUT_DIR, FOLDERS["gray"], key, f"ar{index:02d}.png"
+        )
+        base_gray.save(gray_path)
 
-    # 3. convert to 1-bit bitmap
-    bit_img = resized_img.convert("1", dither=Image.NONE)
-    bit_path = os.path.join(OUTPUT_DIR, FOLDERS["bit1"], f"ar{index:02d}.png")
-    bit_img.save(bit_path)
+        # resize
+        resized = base_gray.resize((W, H), Image.NEAREST)
+        resized_path = os.path.join(
+            OUTPUT_DIR, FOLDERS["resized"], key, f"ar{index:02d}.png"
+        )
+        resized.save(resized_path)
 
-    # 4. raw .bin bitmap for PocketMage
-    bin_path = os.path.join(OUTPUT_DIR, FOLDERS["bin"], f"ar{index:02d}.bin")
-    write_bin_bitmap(resized_path, bin_path)
+        # 1-bit
+        bit_img = resized.convert("1", dither=Image.NONE)
+        bit_path = os.path.join(
+            OUTPUT_DIR, FOLDERS["bit1"], key, f"ar{index:02d}.png"
+        )
+        bit_img.save(bit_path)
+
+        # bin
+        bin_path = os.path.join(
+            OUTPUT_DIR, FOLDERS["bin"], key, f"ar{index:02d}.bin"
+        )
+        write_bin_bitmap(bit_img, bin_path)
 
 
 # --------------------------------------------------
