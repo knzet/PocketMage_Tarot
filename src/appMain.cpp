@@ -236,9 +236,9 @@ void applicationEinkHandler()
 
     // } while (display.nextPage());
     // EINK().refresh();
-    EINK().forceSlowFullUpdate(true);
-    EINK().refresh();
-    // EINK().multiPassRefresh(2);
+    // EINK().forceSlowFullUpdate(true);
+    // EINK().refresh();
+    EINK().multiPassRefresh(2);
 
     OLED().oledWord(cardNamesThisSpread);
   } // end if
