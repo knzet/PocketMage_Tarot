@@ -157,12 +157,10 @@ void applicationEinkHandler()
           }
 
           int idx;
-          // do {
-          //   idx = esp_random() % TOTAL_CARDS;
-          // } while (std::find(totalDrawnCards.begin(), totalDrawnCards.end(), idx) != totalDrawnCards.end());
-
-          // draw from smaller deck
-          idx = esp_random() % (TOTAL_CARDS - totalDrawnCards.size());
+          do
+          {
+            idx = esp_random() % TOTAL_CARDS;
+          } while (std::find(totalDrawnCards.begin(), totalDrawnCards.end(), idx) != totalDrawnCards.end());
 
           totalDrawnCards.push_back(idx); // Mark this card as drawn so no duplicates
 
@@ -191,6 +189,8 @@ void applicationEinkHandler()
         drawn = true;
       }
     } while (display.nextPage());
+    // EINK().refresh();
+    
     OLED().oledWord(cardNamesThisSpread);
   } // end if
 }
