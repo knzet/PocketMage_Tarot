@@ -5,6 +5,11 @@ from PIL import Image
 BASE_URL = "https://www.sacred-texts.com/tarot/pkt/img/ar{:02d}.jpg"
 OUTPUT_DIR = "output"
 
+# -----------------------------
+# CONFIG
+# -----------------------------
+DOWNLOAD_ORIGINALS = False  # <-- set True to redownload originals
+
 SIZES = {
     "single": (128, 218),   # 1-card
     "spread3": (88, 153),   # 3-card
@@ -36,13 +41,21 @@ def ensure_dirs():
 # Download image
 # --------------------------------------------------
 def download_image(index):
+    path = os.path.join(OUTPUT_DIR, FOLDERS["orig"], f"ar{index:02d}.jpg")
+
+    if not DOWNLOAD_ORIGINALS:
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"Missing original image: {path} (DOWNLOAD_ORIGINALS=False)"
+            )
+        return path
+
     url = BASE_URL.format(index)
     resp = requests.get(url)
     if resp.status_code != 200:
         print(f"Failed to download {url}")
         return None
 
-    path = os.path.join(OUTPUT_DIR, FOLDERS["orig"], f"ar{index:02d}.jpg")
     with open(path, "wb") as f:
         f.write(resp.content)
 
@@ -67,7 +80,8 @@ def write_bin_bitmap(img, output_path):
             byte = 0
             for bit in range(8):
                 px = pixels[x + bit, y]
-                bitval = 1 if px == 0 else 0  # black = 1
+                # Treat any non-zero value as white, zero as black
+                bitval = 1 if not px else 0
                 byte |= bitval << (7 - bit)
             data.append(byte)
 

@@ -18,7 +18,7 @@ const char *majorArcana[] = {
     "Judgement", "The World"};
 
 int x = 0;
-bool initialized = false;
+bool firstRun = true;
 char inchar;
 String cardName;
 String cardNamesThisSpread;
@@ -26,6 +26,8 @@ static volatile int CARDS_PER_PAGE = 3;
 
 int selectedCard = -1;
 bool tarotLoaded = false;
+
+static int pageCardIdx[3];
 
 bool drawTarotToBuffer(int idx, int nCardSpread, int drawnCards)
 {
@@ -37,6 +39,7 @@ bool drawTarotToBuffer(int idx, int nCardSpread, int drawnCards)
 
   int cardX;
   int cardY;
+
   switch (nCardSpread)
   {
   case 3:
@@ -65,13 +68,12 @@ bool drawTarotToBuffer(int idx, int nCardSpread, int drawnCards)
   const int BYTES = CARD_W * CARD_H / 8;
   uint8_t tarotImage[BYTES];
   static volatile bool sdActive = true;
-  OLED().setSD(&sdActive);
-  OLED().oledWord("Drawing a card...");
+  // OLED().setSD(&sdActive);
   if (!SD().readBinaryFile(path, tarotImage, BYTES))
   {
     ESP_LOGI(TAG, "ERR: Failed to read %s\n", path);
 
-    OLED().oledWord("SD Read Error");
+    OLED().oledWord("SD Read Error %s", path);
     return false;
   }
   sdActive = false;
@@ -92,6 +94,8 @@ bool drawTarotToBuffer(int idx, int nCardSpread, int drawnCards)
 void processKB()
 {
   inchar = KB().updateKeypress();
+  // EINK().setFullRefreshAfter(1);
+
   if (inchar == 21)
   {
     // right arrow - 3 cards
@@ -108,15 +112,62 @@ void processKB()
   {
     // reshuffle deck
     totalDrawnCards.clear();
-    OLED().oledWord("reshuffled", true);
+    OLED().oledWord("Shuffled", true);
+    didRenderWelcomeMessage = false;
   }
   else if (inchar != 0)
   {
     // Return to pocketMage OS
+    // EINK().setFullRefreshAfter(FULL_REFRESH_AFTER);
+
     rebootToPocketMage();
   }
 
   delay(10);
+}
+void showTarotSplash()
+{
+  display.setRotation(3);
+  display.setFullWindow();
+  display.setTextColor(GxEPD_BLACK);
+
+  display.firstPage();
+  do
+  {
+    display.fillScreen(GxEPD_WHITE);
+
+    // Title
+    display.setTextSize(2);
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds("TAROT", 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((display.width() - w) / 2, 50);
+    display.print("TAROT");
+
+    // Subtitle
+    display.setTextSize(1);
+    const char *subtitle = "Major Arcana";
+    display.getTextBounds(subtitle, 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((display.width() - w) / 2, 85);
+    display.print(subtitle);
+
+    // Divider line
+    display.drawLine(40, 100, display.width() - 40, 100, GxEPD_BLACK);
+
+    // Instructions
+    display.setCursor(30, 130);
+    display.print("O  = draw 1 card");
+
+    display.setCursor(30, 145);
+    display.print(">  = draw 3 cards");
+
+    display.setCursor(30, 160);
+    display.print("<  = reshuffle deck");
+
+    display.setCursor(30, 185);
+    display.print("Any key = exit");
+
+  } while (display.nextPage());
 }
 
 void applicationEinkHandler()
@@ -124,7 +175,13 @@ void applicationEinkHandler()
   if (!didRenderWelcomeMessage)
   {
     // todo: eink greeting
-    OLED().oledWord("o to draw 1, > to draw 3, < to shuffle, any key to exit", false);
+    showTarotSplash();
+    if (firstRun)
+    {
+      OLED().oledWord("", false, true);
+      firstRun = false;
+    }
+    // OLED().oledWord("o to draw 1, > to draw 3, < to shuffle, any key to exit", false);
     didRenderWelcomeMessage = true;
   }
   if (!alreadyDrawnThisEinkPage)
@@ -136,61 +193,53 @@ void applicationEinkHandler()
     display.setFullWindow();
     display.setTextColor(GxEPD_BLACK);
 
-    display.firstPage();
-    bool drawn = false;
-    do
+    OLED().oledWord(
+        CARDS_PER_PAGE == 3 ? "Drawing 3 cards..." : "Drawing a card...");
+
+    for (int drawnCards = 0; drawnCards < CARDS_PER_PAGE; drawnCards++)
     {
-      if (!drawn)
+      static const int MAJOR_ARCANA_COUNT = sizeof(majorArcana) / sizeof(majorArcana[0]);
+      // Pick a random card at app start and when user draws another
+      static const int TAROT_COUNT = sizeof(majorArcana) / sizeof(majorArcana[0]);
+      if (totalDrawnCards.size() >= TOTAL_CARDS)
       {
-        display.fillScreen(GxEPD_WHITE);
-        // draw cards evenly across the page, n cards in a spread
-        for (int drawnCards = 0; drawnCards < CARDS_PER_PAGE; drawnCards++)
-        {
-          static const int MAJOR_ARCANA_COUNT = sizeof(majorArcana) / sizeof(majorArcana[0]);
-          // Pick a random card at app start and when user draws another
-          static const int TAROT_COUNT = sizeof(majorArcana) / sizeof(majorArcana[0]);
-          if (totalDrawnCards.size() >= TOTAL_CARDS)
-          {
-            ESP_LOGI(TAG, "Listing directory %s\r\n", dirname);
-            OLED().oledWord("End of deck reached!", true);
-            return;
-          }
-
-          int idx;
-          do
-          {
-            idx = esp_random() % TOTAL_CARDS;
-          } while (std::find(totalDrawnCards.begin(), totalDrawnCards.end(), idx) != totalDrawnCards.end());
-
-          totalDrawnCards.push_back(idx); // Mark this card as drawn so no duplicates
-
-          cardName = majorArcana[idx];
-
-          ESP_LOGI(TAG, "cardname: %s\r\n", cardName);
-          // track names to render to oled
-          cardNamesThisSpread.concat(cardName + " ");
-
-          // card rendering information
-
-          // Card image size
-          /**
-           * 320x240px eink
-           * 320/3=106
-           * 106-20 (for 10px padding) = 86
-           * todo: test if 86px wide tarot card is readable
-           * w needs to be div by 8
-           * 88
-           * 106-88=18 => 9px padding OK
-           * 88x153 for 3x spread
-           */
-
-          drawTarotToBuffer(idx, CARDS_PER_PAGE, drawnCards);
-        } // end for
-        drawn = true;
+        ESP_LOGI(TAG, "Listing directory %s\r\n", dirname);
+        OLED().oledWord("End of deck reached!", true);
+        return;
       }
-    } while (display.nextPage());
+
+      int idx;
+      do
+      {
+        idx = esp_random() % TOTAL_CARDS;
+      } while (std::find(totalDrawnCards.begin(), totalDrawnCards.end(), idx) != totalDrawnCards.end());
+      totalDrawnCards.push_back(idx); // Mark this card as drawn so no duplicates
+
+      pageCardIdx[drawnCards] = idx;
+
+      cardName = majorArcana[idx];
+
+      ESP_LOGI(TAG, "cardname: %s\r\n", cardName);
+      // track names to render to oled
+      cardNamesThisSpread.concat(cardName + " ");
+    }
+
+    // display.firstPage();
+    // do
+    // {
+    display.fillScreen(GxEPD_WHITE);
+    // draw cards evenly across the page, n cards in a spread
+    for (int drawnCards = 0; drawnCards < CARDS_PER_PAGE; drawnCards++)
+    {
+      drawTarotToBuffer(pageCardIdx[drawnCards], CARDS_PER_PAGE, drawnCards);
+    }
+
+    // } while (display.nextPage());
     // EINK().refresh();
-    
+    EINK().forceSlowFullUpdate(true);
+    EINK().refresh();
+    // EINK().multiPassRefresh(2);
+
     OLED().oledWord(cardNamesThisSpread);
   } // end if
 }
