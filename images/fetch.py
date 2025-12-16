@@ -11,8 +11,8 @@ OUTPUT_DIR = "output"
 DOWNLOAD_ORIGINALS = False  # <-- set True to redownload originals
 
 SIZES = {
-    "single": (128, 218),   # 1-card
-    "spread3": (88, 153),   # 3-card
+    "1": (128, 218),   # 1-card
+    "3": (88, 153),   # 3-card
 }
 
 FOLDERS = {

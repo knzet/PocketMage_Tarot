@@ -17,16 +17,26 @@ def create_tar(source, target, env):
 
     cmd = ["tar", "-cf", tar_path]
 
-    # Add BIN (relative via build dir)
+    # --- Add tarot.bin and tarot_ICON.bin at TAR root ---
     cmd += ["-C", build_dir, f"{app_name}.bin"]
-
-    # Add ICON from project root
     if os.path.exists(icon_path):
         cmd += ["-C", project_dir, f"{app_name}_ICON.bin"]
     else:
         print("Warning: icon not found, creating TAR without icon")
 
-    subprocess.run(cmd)
+    # --- Add binary assets under assets/... ---
+    binary_assets_src = os.path.join(project_dir, "images/output/05_binary")
+    for folder in os.listdir(binary_assets_src):
+        folder_path = os.path.join(binary_assets_src, folder)
+        if os.path.isdir(folder_path):
+            # Include folder contents recursively, mapped to assets/<folder>
+            cmd += [
+                "-C", binary_assets_src,
+                "--transform", f"s,^{folder},assets/{folder},",
+                folder
+            ]
+
+    subprocess.run(cmd, check=True)
     print(f"Created TAR in project root: {tar_path}")
 
 projenv.AddPostAction("$BUILD_DIR/firmware.bin", create_tar)
